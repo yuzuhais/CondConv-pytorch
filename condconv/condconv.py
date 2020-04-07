@@ -10,12 +10,15 @@ from torch.nn.parameter import Parameter
 
 class _routing(nn.Module):
 
-    def __init__(self, in_channels, num_experts):
+    def __init__(self, in_channels, num_experts, dropout_rate=0.2):
         super(_routing, self).__init__()
+        
+        self.dropout = nn.Dropout(dropout_rate)
         self.fc = nn.Linear(in_channels, num_experts)
 
     def forward(self, x):
         x = torch.flatten(x)
+        x = self.dropout(x)
         x = self.fc(x)
         return F.sigmoid(x)
     
