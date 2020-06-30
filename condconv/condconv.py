@@ -95,11 +95,16 @@ class CondConv2D(_ConvNd):
                             _pair(0), self.dilation, self.groups)
         return F.conv2d(input, weight, self.bias, self.stride,
                         self.padding, self.dilation, self.groups)
-
-    def forward(self, input):
-        pooled_inputs = self._avg_pooling(input)
-        routing_weights = self._routing_fn(pooled_inputs)
-        kernels = torch.sum(routing_weights[:,None, None, None, None] * self.weight, 0)
-
-        return self._conv_forward(input, kernels)
+    
+    def forward(self, inputs):
+        b, _, _, _ = inputs.size()
+        res = []
+        for input in inputs:
+            input = input.unsqueeze(0)
+            pooled_inputs = self._avg_pooling(input)
+            routing_weights = self._routing_fn(pooled_inputs)
+            kernels = torch.sum(routing_weights[: ,None, None, None, None] * self.weight, 0)
+            out = self._conv_forward(input, kernels)
+            res.append(out)
+        return torch.cat(res, dim=0)
 
