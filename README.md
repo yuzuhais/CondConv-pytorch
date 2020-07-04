@@ -30,8 +30,6 @@ import torch
 from condconv import CondConv2D
 
 
-
-
 class Model(nn.Module):
     def __init__(self, num_experts):
         super(Model, self).__init__()
