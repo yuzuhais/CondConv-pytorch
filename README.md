@@ -30,7 +30,6 @@ import torch
 from condconv import CondConv2D
 
 
-batch_size = 1 # You need update param a sample.
 
 
 class Model(nn.Module):
