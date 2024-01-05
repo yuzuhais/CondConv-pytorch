@@ -90,7 +90,7 @@ class CondConv2D(_ConvNd):
 
     def _conv_forward(self, input, weight):
         if self.padding_mode != 'zeros':
-            return F.conv2d(F.pad(input, self._padding_repeated_twice, mode=self.padding_mode),
+            return F.conv2d(F.pad(input, self._reversed_padding_repeated_twice, mode=self.padding_mode),
                             weight, self.bias, self.stride,
                             _pair(0), self.dilation, self.groups)
         return F.conv2d(input, weight, self.bias, self.stride,
