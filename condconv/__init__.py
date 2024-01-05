@@ -1,3 +1,3 @@
-from .condconv import CondConv2D
+from .condconv import CondConv1D, CondConv2D
 
-__all__ = ['CondConv2D']
+__all__ = ['CondConv1D', 'CondConv2D']

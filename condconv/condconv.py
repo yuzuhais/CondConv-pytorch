@@ -108,3 +108,82 @@ class CondConv2D(_ConvNd):
             res.append(out)
         return torch.cat(res, dim=0)
 
+class CondConv1D(_ConvNd):
+    r"""Learn specialized convolutional kernels for each example.
+
+    As described in the paper
+    `CondConv: Conditionally Parameterized Convolutions for Efficient Inference`_ ,
+    conditionally parameterized convolutions (CondConv), 
+    which challenge the paradigm of static convolutional kernels 
+    by computing convolutional kernels as a function of the input.
+
+    Args:
+        in_channels (int): Number of channels in the input image
+        out_channels (int): Number of channels produced by the convolution
+        kernel_size (int): Size of the convolving kernel
+        stride (int, optional): Stride of the convolution. Default: 1
+        padding (int, optional): Zero-padding added to both sides of the input. Default: 0
+        padding_mode (string, optional): ``'zeros'``, ``'reflect'``, ``'replicate'`` or ``'circular'``. Default: ``'zeros'``
+        dilation (int, optional): Spacing between kernel elements. Default: 1
+        groups (int, optional): Number of blocked connections from input channels to output channels. Default: 1
+        bias (bool, optional): If ``True``, adds a learnable bias to the output. Default: ``True``
+        num_experts (int): Number of experts per layer 
+    Shape:
+        - Input: :math:`(N, C_{in}, L_{in})`
+        - Output: :math:`(N, C_{out}, L_{out})` 
+    Attributes:
+        weight (Tensor): the learnable weights of the module of shape
+            :math:`(\text{out\_channels},
+            \frac{\text{in\_channels}}{\text{groups}}, \text{kernel\_size})`.
+            The values of these weights are sampled from
+            :math:`\mathcal{U}(-\sqrt{k}, \sqrt{k})` where
+            :math:`k = \frac{groups}{C_\text{in} * \text{kernel\_size}}`
+        bias (Tensor):   the learnable bias of the module of shape
+            (out_channels). If :attr:`bias` is ``True``, then the values of these weights are
+            sampled from :math:`\mathcal{U}(-\sqrt{k}, \sqrt{k})` where
+            :math:`k = \frac{groups}{C_\text{in} * \text{kernel\_size}}`
+
+    .. _CondConv: Conditionally Parameterized Convolutions for Efficient Inference:
+       https://arxiv.org/abs/1904.04971
+
+    """
+
+    def __init__(self, in_channels, out_channels, kernel_size, stride=1,
+                 padding=0, dilation=1, groups=1,
+                 bias=True, padding_mode='zeros', num_experts=3, dropout_rate=0.2):
+        kernel_size = (kernel_size,)
+        stride = (stride,)
+        padding = (padding,)
+        dilation = (dilation,)
+        super(CondConv1D, self).__init__(
+            in_channels, out_channels, kernel_size, stride, padding, dilation,
+            False, (0,), groups, bias, padding_mode)
+
+        self._avg_pooling = functools.partial(F.adaptive_avg_pool1d, output_size=1)
+        self._routing_fn = _routing(in_channels, num_experts, dropout_rate)
+        
+        self.weight = Parameter(torch.Tensor(
+            num_experts, out_channels, in_channels // groups, *kernel_size))
+        
+        self.reset_parameters()
+
+    def _conv_forward(self, input, weight):
+        if self.padding_mode != 'zeros':
+            return F.conv1d(F.pad(input, self._reversed_padding_repeated_twice, mode=self.padding_mode),
+                            weight, self.bias, self.stride,
+                            0, self.dilation, self.groups)
+        return F.conv1d(input, weight, self.bias, self.stride,
+                        self.padding, self.dilation, self.groups)
+    
+    def forward(self, inputs):
+        b, _, _ = inputs.size()
+        res = []
+        for input in inputs:
+            input = input.unsqueeze(0)
+            pooled_inputs = self._avg_pooling(input)
+            routing_weights = self._routing_fn(pooled_inputs)
+            kernels = torch.sum(routing_weights[: ,None, None, None] * self.weight, 0)
+            out = self._conv_forward(input, kernels)
+            res.append(out)
+        return torch.cat(res, dim=0)
+
